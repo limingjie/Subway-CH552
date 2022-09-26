@@ -1,97 +1,183 @@
 #include <stdint.h>
+#include <stdbool.h>
 #include <ch554.h>
 #include <debug.h>
 #include "bitbang.h"
 
-// Define PINs
-#define BTN_CLOSE_PIN 4  // P1.4
-#define BTN_RUN_PIN   7  // P1.7
-#define LED_PIN       0  // P3.0
-#define LED_EN_PIN    1  // P3.1
-#define LATCH_PIN     2  // P3.2
+// Input Pins
+#define BTN_A_PIN 1  // P1.1
+#define BTN_B_PIN 4  // P1.4
+#define BTN_C_PIN 5  // P1.5
+#define BTN_D_PIN 6  // P1.6
+#define BTN_E_PIN 7  // P1.7
+
+// Output Pins
+#define LED_PIN   0  // P3.0
+#define LATCH_PIN 2  // P3.2
 
 // Define bits
-SBIT(LED, 0xB0, LED_PIN);        // P3.0
-SBIT(LED_EN, 0xB0, LED_EN_PIN);  // P3.1
-SBIT(LATCH, 0xB0, LATCH_PIN);    // P3.2
+SBIT(LED, 0xB0, LED_PIN);      // P3.0
+SBIT(LATCH, 0xB0, LATCH_PIN);  // P3.2
 
 // WS2812 data
-#define LED_COUNT (255)
-__xdata uint8_t led_data[LED_COUNT * 3];
+#define LED_COUNT (12)
+__xdata uint8_t ledData[LED_COUNT * 3];
 
-void rgbPattern()
+#define BRIGHTNESS 15
+
+void setColor(uint8_t index, uint8_t r, uint8_t g, uint8_t b)
 {
-    static uint8_t brightness = 5;
-    static uint8_t color      = 0;
-
-    uint8_t i;
-
-    // Fill in some data
-    for (i = 0; i < LED_COUNT; i++)
-    {
-        uint8_t seq = (color + i) % 7;
-        // LED ring is GRB
-        led_data[i * 3 + 1] = ((seq == 0) || (seq == 3) || (seq == 5) || (seq == 6)) ? (brightness) : 0;
-        led_data[i * 3 + 0] = ((seq == 1) || (seq == 3) || (seq == 4) || (seq == 6)) ? (brightness) : 0;
-        led_data[i * 3 + 2] = ((seq == 2) || (seq == 4) || (seq == 5) || (seq == 6)) ? (brightness) : 0;
-    }
-
-    color = (color + 1) % 7;  // 3 for RGB, 7 for RGB???W
+    index *= 3;
+    ledData[index++] = g;
+    ledData[index++] = r;
+    ledData[index]   = b;
 }
 
 void main()
 {
     uint8_t previousP1 = P1;
-    uint8_t ledRun     = 0;
+    bool    ledChanged = false;
 
     CfgFsys();
     mDelaymS(5);
 
-    // Configure pin 3.2 as GPIO output
-    P3_MOD_OC &= ~(1 << LATCH_PIN);
-    P3_DIR_PU |= (1 << LATCH_PIN);
+    // Configure P3.0 and P3.4 as GPIO output
+    P3_MOD_OC &= ~((1 << LATCH_PIN) & (1 << LED_PIN));
+    P3_DIR_PU |= (1 << LATCH_PIN) | (1 << LED_PIN);
     LATCH = 0;  // Latch power on
+    LED   = 0;
 
-    // Configure pin 3.1 as GPIO output
-    P3_MOD_OC &= ~(1 << LED_EN_PIN);
-    P3_DIR_PU |= (1 << LED_EN_PIN);
-    LED_EN = 1;  // Disable LED
+    // Configure P1.1, P1.4, P1.5, P1.6, and P1.7 as input.
+    P1_MOD_OC &= ~((1 << BTN_A_PIN) & (1 << BTN_B_PIN) & (1 << BTN_C_PIN) & (1 << BTN_D_PIN) & (1 << BTN_E_PIN));
+    P1_DIR_PU &= ~((1 << BTN_A_PIN) & (1 << BTN_B_PIN) & (1 << BTN_C_PIN) & (1 << BTN_D_PIN) & (1 << BTN_E_PIN));
 
-    // Configure pin 3.0 as GPIO output
-    P3_MOD_OC &= ~(1 << LED_PIN);
-    P3_DIR_PU |= (1 << LED_PIN);
+    uint8_t gates[2]        = {10, 11};
+    uint8_t lineStarts[2]   = {0, 5};
+    uint8_t lineSize[2]     = {5, 5};
+    uint8_t blinkTimer[2]   = {0, 0};
+    int8_t  currentStops[2] = {0, 0};  // Line A & Line B current position.
+    bool    lineRunning[2]  = {true, true};
 
-    // Configure pin 1.7 as GPIO input
-    P1_MOD_OC &= ~(1 << BTN_RUN_PIN);
-    P1_DIR_PU &= ~(1 << BTN_RUN_PIN);
-
-    // Configure pin 1.4 as GPIO input
-    P1_MOD_OC &= ~(1 << BTN_CLOSE_PIN);
-    P1_DIR_PU &= ~(1 << BTN_CLOSE_PIN);
+    setColor(lineStarts[0] + currentStops[0], BRIGHTNESS, 0, 0);
+    setColor(lineStarts[1] + currentStops[1], BRIGHTNESS, 0, 0);
+    setColor(gates[0], BRIGHTNESS, 0, 0);
+    setColor(gates[1], 0, BRIGHTNESS, 0);
+    ledChanged = true;
 
     while (1)
     {
-        // BTN_RUN_PIN Released
-        if ((previousP1 & (1 << BTN_RUN_PIN)) == 0 && (P1 & (1 << BTN_RUN_PIN)) != 0)
-        {
-            ledRun = (ledRun == 0) ? 1 : 0;
-            LED_EN = ledRun ? 0 : 1;
-            mDelaymS(50);
-        }
-
-        if ((previousP1 & (1 << BTN_CLOSE_PIN)) == 0 && (P1 & (1 << BTN_CLOSE_PIN)) != 0)
+        if ((previousP1 & (1 << BTN_A_PIN)) == 0 && (P1 & (1 << BTN_A_PIN)) != 0)
         {
             LATCH = 1;
         }
 
-        previousP1 = P1;
-
-        if (ledRun)
+        if ((previousP1 & (1 << BTN_B_PIN)) == 0 && (P1 & (1 << BTN_B_PIN)) != 0)
         {
-            rgbPattern();
+            if (!lineRunning[0])
+            {
+                setColor(lineStarts[0] + currentStops[0]++, 0, BRIGHTNESS, 0);
+                currentStops[0] %= 5;
+                setColor(lineStarts[0] + currentStops[0], BRIGHTNESS, 0, 0);
+
+                ledChanged = true;
+            }
+            else
+            {
+                setColor(gates[currentStops[0] % 2], BRIGHTNESS, 0, 0);
+                setColor(gates[(currentStops[0] + 1) % 2], 0, BRIGHTNESS, 0);
+            }
+
+            lineRunning[0] = !lineRunning[0];
         }
 
-        bitbangWs2812(LED_COUNT, led_data);
-        mDelaymS(50);
+        if ((previousP1 & (1 << BTN_C_PIN)) == 0 && (P1 & (1 << BTN_C_PIN)) != 0)
+        {
+            if (!lineRunning[0])
+            {
+                setColor(lineStarts[0] + currentStops[0]--, 0, BRIGHTNESS, 0);
+                if (currentStops[0] < 0)
+                {
+                    currentStops[0] += 5;
+                }
+                setColor(lineStarts[0] + currentStops[0], BRIGHTNESS, 0, 0);
+
+                ledChanged = true;
+            }
+            else
+            {
+                setColor(gates[currentStops[0] % 2], BRIGHTNESS, 0, 0);
+                setColor(gates[(currentStops[0] + 1) % 2], 0, BRIGHTNESS, 0);
+            }
+
+            lineRunning[0] = !lineRunning[0];
+        }
+
+        if ((previousP1 & (1 << BTN_D_PIN)) == 0 && (P1 & (1 << BTN_D_PIN)) != 0)
+        {
+            if (!lineRunning[1])
+            {
+                setColor(lineStarts[1] + currentStops[1]++, 0, BRIGHTNESS, 0);
+                currentStops[1] %= 5;
+                setColor(lineStarts[1] + currentStops[1], BRIGHTNESS, 0, 0);
+
+                ledChanged = true;
+            }
+
+            lineRunning[1] = !lineRunning[1];
+        }
+
+        if ((previousP1 & (1 << BTN_E_PIN)) == 0 && (P1 & (1 << BTN_E_PIN)) != 0)
+        {
+            if (!lineRunning[1])
+            {
+                setColor(lineStarts[1] + currentStops[1]--, 0, BRIGHTNESS, 0);
+                if (currentStops[1] < 0)
+                {
+                    currentStops[1] += 5;
+                }
+                setColor(lineStarts[1] + currentStops[1], BRIGHTNESS, 0, 0);
+
+                ledChanged = true;
+            }
+
+            lineRunning[1] = !lineRunning[1];
+        }
+
+        previousP1 = P1;
+        mDelaymS(8);  // debounce
+
+        for (uint8_t i = 0; i < 2; i++)
+        {
+            if (lineRunning[i])  // Blinks
+            {
+                blinkTimer[i]++;
+                if (blinkTimer[i] == 10)  // Turn on
+                {
+                    setColor(lineStarts[i] + currentStops[i], BRIGHTNESS, 0, 0);
+                    ledChanged = true;
+                }
+                else if (blinkTimer[i] == 20)  // Turn off
+                {
+                    blinkTimer[i] = 0;
+                    setColor(lineStarts[i] + currentStops[i], 0, 0, 0);
+                    ledChanged = true;
+                }
+            }
+            else
+            {
+                if (blinkTimer[i] < 10)
+                {
+                    blinkTimer[i] = 10;
+                    setColor(lineStarts[i] + currentStops[i], BRIGHTNESS, 0, 0);
+                    ledChanged = true;
+                }
+            }
+        }
+
+        if (ledChanged)
+        {
+            bitbangWs2812(LED_COUNT, ledData);
+            ledChanged = false;
+        }
     }
 }
