@@ -2,7 +2,7 @@
 #include <ch554.h>
 #include "bitbang.h"
 
-void bitbangWs2812(uint8_t ledCount, __xdata uint8_t* ledData)
+void bigBangWS2812(uint8_t ledCount, __xdata uint8_t* ledData)
 {
     ledCount;
     ledData;
@@ -10,7 +10,7 @@ void bitbangWs2812(uint8_t ledCount, __xdata uint8_t* ledData)
     // Bitbang routine
     // Input parameters: (determined by compilation)
     // * byteCount should be allocated in dpl
-    // * ledData should be allocated with name '_bitbangWs2812_PARAM_2'
+    // * ledData should be allocated with name '_bigBangWS2812_PARAM_2'
 
     // Strategy:
     // * Keep the data memory pointer in DPTR
@@ -24,8 +24,8 @@ void bitbangWs2812(uint8_t ledCount, __xdata uint8_t* ledData)
 
     mov r2, dpl             ; Load the LED count into r2
 
-    mov dpl, _bitbangWs2812_PARM_2  ; Load the LED data start address into DPTR
-    mov dph, (_bitbangWs2812_PARM_2 + 1)
+    mov dpl, _bigBangWS2812_PARM_2  ; Load the LED data start address into DPTR
+    mov dph, (_bigBangWS2812_PARM_2 + 1)
 
     00001$:                 ; byte loop
 

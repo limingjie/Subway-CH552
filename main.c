@@ -1,8 +1,21 @@
 #include <stdint.h>
 #include <stdbool.h>
+
 #include <ch554.h>
 #include <debug.h>
+
 #include "bitbang.h"
+
+typedef struct
+{
+    uint8_t  length;
+    uint8_t  stations[10];
+    int8_t   at;
+    bool     arrives;
+    uint8_t  blinkTimer;
+    uint8_t *color;
+    uint8_t *arriveColor;
+} Subway;
 
 // Input Pins
 #define BTN_A_PIN 1  // P1.1
@@ -20,23 +33,70 @@ SBIT(LED, 0xB0, LED_PIN);      // P3.0
 SBIT(LATCH, 0xB0, LATCH_PIN);  // P3.2
 
 // WS2812 data
-#define LED_COUNT (12)
-__xdata uint8_t ledData[LED_COUNT * 3];
-
+#define LED_COUNT  12
 #define BRIGHTNESS 15
+__xdata uint8_t ledData[LED_COUNT * 3];
+bool            ledChanged = false;
 
-void setColor(uint8_t index, uint8_t r, uint8_t g, uint8_t b)
+uint8_t red[3]    = {BRIGHTNESS, 0, 0};
+uint8_t green[3]  = {0, BRIGHTNESS, 0};
+uint8_t blue[3]   = {0, 0, BRIGHTNESS};
+uint8_t purple[3] = {BRIGHTNESS, 0, BRIGHTNESS};
+uint8_t black[3]  = {0, 0, 0};
+
+Subway line[2] = {
+    {10, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, 0, false, 0, green, red},
+    {5, {5, 6, 7, 8, 9}, 0, false, 0, blue, purple},
+};
+
+uint8_t gates[2] = {10, 11};
+
+void setColor(uint8_t index, uint8_t *color)
 {
     index *= 3;
-    ledData[index++] = g;
-    ledData[index++] = r;
-    ledData[index]   = b;
+    ledData[index++] = color[1];
+    ledData[index++] = color[0];
+    ledData[index]   = color[2];
+}
+
+void run(uint8_t i, bool forward)
+{
+    if (line[i].arrives)
+    {
+        setColor(line[i].stations[line[i].at], line[i].color);
+        if (forward)
+        {
+            line[i].at++;
+            line[i].at %= line[i].length;
+        }
+        else
+        {
+            line[i].at--;
+            if (line[i].at < 0)
+            {
+                line[i].at += line[i].length;
+            }
+        }
+        setColor(line[i].stations[line[i].at], line[i].arriveColor);
+
+        ledChanged = true;
+    }
+    else
+    {
+        if (i == 0)
+        {
+            setColor(gates[line[i].at % 2], red);
+            setColor(gates[(line[i].at + 1) % 2], green);
+            ledChanged = true;
+        }
+    }
+
+    line[i].arrives = !line[i].arrives;
 }
 
 void main()
 {
     uint8_t previousP1 = P1;
-    bool    ledChanged = false;
 
     CfgFsys();
     mDelaymS(5);
@@ -51,17 +111,13 @@ void main()
     P1_MOD_OC &= ~((1 << BTN_A_PIN) & (1 << BTN_B_PIN) & (1 << BTN_C_PIN) & (1 << BTN_D_PIN) & (1 << BTN_E_PIN));
     P1_DIR_PU &= ~((1 << BTN_A_PIN) & (1 << BTN_B_PIN) & (1 << BTN_C_PIN) & (1 << BTN_D_PIN) & (1 << BTN_E_PIN));
 
-    uint8_t gates[2]        = {10, 11};
-    uint8_t lineStarts[2]   = {0, 5};
-    uint8_t lineSize[2]     = {5, 5};
-    uint8_t blinkTimer[2]   = {0, 0};
-    int8_t  currentStops[2] = {0, 0};  // Line A & Line B current position.
-    bool    lineRunning[2]  = {true, true};
+    for (uint8_t i = 0; i < 2; i++)
+    {
+        setColor(line[i].stations[line[i].at], line[i].arriveColor);
+    }
+    setColor(gates[0], red);
+    setColor(gates[1], green);
 
-    setColor(lineStarts[0] + currentStops[0], BRIGHTNESS, 0, 0);
-    setColor(lineStarts[1] + currentStops[1], BRIGHTNESS, 0, 0);
-    setColor(gates[0], BRIGHTNESS, 0, 0);
-    setColor(gates[1], 0, BRIGHTNESS, 0);
     ledChanged = true;
 
     while (1)
@@ -73,74 +129,22 @@ void main()
 
         if ((previousP1 & (1 << BTN_B_PIN)) == 0 && (P1 & (1 << BTN_B_PIN)) != 0)
         {
-            if (!lineRunning[0])
-            {
-                setColor(lineStarts[0] + currentStops[0]++, 0, BRIGHTNESS, 0);
-                currentStops[0] %= 5;
-                setColor(lineStarts[0] + currentStops[0], BRIGHTNESS, 0, 0);
-
-                ledChanged = true;
-            }
-            else
-            {
-                setColor(gates[currentStops[0] % 2], BRIGHTNESS, 0, 0);
-                setColor(gates[(currentStops[0] + 1) % 2], 0, BRIGHTNESS, 0);
-            }
-
-            lineRunning[0] = !lineRunning[0];
+            run(0, false);
         }
 
         if ((previousP1 & (1 << BTN_C_PIN)) == 0 && (P1 & (1 << BTN_C_PIN)) != 0)
         {
-            if (!lineRunning[0])
-            {
-                setColor(lineStarts[0] + currentStops[0]--, 0, BRIGHTNESS, 0);
-                if (currentStops[0] < 0)
-                {
-                    currentStops[0] += 5;
-                }
-                setColor(lineStarts[0] + currentStops[0], BRIGHTNESS, 0, 0);
-
-                ledChanged = true;
-            }
-            else
-            {
-                setColor(gates[currentStops[0] % 2], BRIGHTNESS, 0, 0);
-                setColor(gates[(currentStops[0] + 1) % 2], 0, BRIGHTNESS, 0);
-            }
-
-            lineRunning[0] = !lineRunning[0];
+            run(0, true);
         }
 
         if ((previousP1 & (1 << BTN_D_PIN)) == 0 && (P1 & (1 << BTN_D_PIN)) != 0)
         {
-            if (!lineRunning[1])
-            {
-                setColor(lineStarts[1] + currentStops[1]++, 0, BRIGHTNESS, 0);
-                currentStops[1] %= 5;
-                setColor(lineStarts[1] + currentStops[1], BRIGHTNESS, 0, 0);
-
-                ledChanged = true;
-            }
-
-            lineRunning[1] = !lineRunning[1];
+            run(1, false);
         }
 
         if ((previousP1 & (1 << BTN_E_PIN)) == 0 && (P1 & (1 << BTN_E_PIN)) != 0)
         {
-            if (!lineRunning[1])
-            {
-                setColor(lineStarts[1] + currentStops[1]--, 0, BRIGHTNESS, 0);
-                if (currentStops[1] < 0)
-                {
-                    currentStops[1] += 5;
-                }
-                setColor(lineStarts[1] + currentStops[1], BRIGHTNESS, 0, 0);
-
-                ledChanged = true;
-            }
-
-            lineRunning[1] = !lineRunning[1];
+            run(1, true);
         }
 
         previousP1 = P1;
@@ -148,27 +152,27 @@ void main()
 
         for (uint8_t i = 0; i < 2; i++)
         {
-            if (lineRunning[i])  // Blinks
+            if (!line[i].arrives)  // Blinks
             {
-                blinkTimer[i]++;
-                if (blinkTimer[i] == 10)  // Turn on
+                line[i].blinkTimer++;
+                if (line[i].blinkTimer == 10)  // Turn on
                 {
-                    setColor(lineStarts[i] + currentStops[i], BRIGHTNESS, 0, 0);
+                    setColor(line[i].stations[line[i].at], line[i].arriveColor);
                     ledChanged = true;
                 }
-                else if (blinkTimer[i] == 20)  // Turn off
+                else if (line[i].blinkTimer == 20)  // Turn off
                 {
-                    blinkTimer[i] = 0;
-                    setColor(lineStarts[i] + currentStops[i], 0, 0, 0);
+                    line[i].blinkTimer = 0;
+                    setColor(line[i].stations[line[i].at], black);
                     ledChanged = true;
                 }
             }
             else
             {
-                if (blinkTimer[i] < 10)
+                if (line[i].blinkTimer < 10)
                 {
-                    blinkTimer[i] = 10;
-                    setColor(lineStarts[i] + currentStops[i], BRIGHTNESS, 0, 0);
+                    line[i].blinkTimer = 10;
+                    setColor(line[i].stations[line[i].at], line[i].arriveColor);
                     ledChanged = true;
                 }
             }
@@ -176,7 +180,7 @@ void main()
 
         if (ledChanged)
         {
-            bitbangWs2812(LED_COUNT, ledData);
+            bigBangWS2812(LED_COUNT, ledData);
             ledChanged = false;
         }
     }
