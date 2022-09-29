@@ -44,12 +44,12 @@ __data const uint8_t BLACK[3]   = {0, 0, 0};
 
 typedef struct
 {
-    const uint8_t         stations[25];
+    const uint8_t         stops[25];
     const uint8_t         length;
-    int8_t                at;
+    uint8_t               at;
     uint8_t               arrives;
     uint8_t               blinkTimer;
-    __data const uint8_t *color[2];  // `__data` -> 8-bit pointer
+    __data const uint8_t *colors[2];  // `__data` -> 8-bit pointer
 } Subway;
 
 __data Subway line[2] = {
@@ -58,6 +58,8 @@ __data Subway line[2] = {
 };
 
 uint8_t gates[2] = {10, 11};
+
+uint16_t idleTimer = 0;
 
 void setColor(uint8_t index, __data const uint8_t *color)  // `__data` -> 8-bit pointer
 {
@@ -80,21 +82,23 @@ void runSubway(uint8_t i, __bit forward)
     __data Subway *l = &line[i];  // `__data` -> 8-bit pointer
     if (l->arrives)
     {
-        setColor(l->stations[l->at], l->color[SUBWAY_COLOR]);
+        setColor(l->stops[l->at], l->colors[SUBWAY_COLOR]);
         if (forward)
         {
-            l->at++;
-            l->at %= l->length;
+            if (++l->at >= l->length)
+            {
+                l->at = 0;
+            }
         }
         else
         {
-            l->at--;
-            if (l->at < 0)
+            if (l->at == 0)
             {
-                l->at += l->length;
+                l->at = l->length;
             }
+            l->at--;
         }
-        setColor(l->stations[l->at], l->color[SUBWAY_ARRIVAL_COLOR]);
+        setColor(l->stops[l->at], l->colors[SUBWAY_ARRIVAL_COLOR]);
 
         ledChanged = 1;
     }
@@ -102,13 +106,15 @@ void runSubway(uint8_t i, __bit forward)
     {
         if (i == 0)
         {
-            setColor(gates[l->at % 2], RED);
-            setColor(gates[(l->at + 1) % 2], GREEN);
+            setColor(gates[l->at & 0x01], RED);
+            setColor(gates[(l->at + 1) & 0x01], GREEN);
             ledChanged = 1;
         }
     }
 
     l->arrives = !l->arrives;
+
+    idleTimer = 0;  // Reset idleTimer
 }
 
 void blinkLights()
@@ -121,13 +127,13 @@ void blinkLights()
             l->blinkTimer++;
             if (l->blinkTimer == 10)  // Turn on
             {
-                setColor(l->stations[l->at], l->color[SUBWAY_ARRIVAL_COLOR]);
+                setColor(l->stops[l->at], l->colors[SUBWAY_ARRIVAL_COLOR]);
                 ledChanged = 1;
             }
             else if (l->blinkTimer == 20)  // Turn off
             {
                 l->blinkTimer = 0;
-                setColor(l->stations[l->at], BLACK);
+                setColor(l->stops[l->at], BLACK);
                 ledChanged = 1;
             }
         }
@@ -136,7 +142,7 @@ void blinkLights()
             if (l->blinkTimer < 10)
             {
                 l->blinkTimer = 10;
-                setColor(l->stations[l->at], l->color[SUBWAY_ARRIVAL_COLOR]);
+                setColor(l->stops[l->at], l->colors[SUBWAY_ARRIVAL_COLOR]);
                 ledChanged = 1;
             }
         }
@@ -150,7 +156,7 @@ void processEvents()
 
     if (KEY_RELEASED(KEY_A_PIN))
     {
-        LATCH = 1;
+        LATCH = 1;  // Power off
     }
     if (KEY_RELEASED(KEY_B_PIN))
     {
@@ -198,6 +204,13 @@ void main()
 
     while (1)
     {
+        // Each loop takes around 10 milliseconds.
+        // 6,000 loops is around 60 seconds.
+        if (idleTimer++ >= 6000)
+        {
+            LATCH = 1;  // Power off
+        }
+
         processEvents();
 
         blinkLights();
