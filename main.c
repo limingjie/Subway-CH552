@@ -74,9 +74,9 @@ uint16_t idleTimer = 0;
 void setColor(uint8_t index, __data const uint8_t *color)  // `__data` -> 8-bit pointer
 {
     index *= 3;
-    ledData[index]     = color[1];
-    ledData[index + 1] = color[0];
-    ledData[index + 2] = color[2];
+    ledData[index]   = color[1];
+    ledData[++index] = color[0];
+    ledData[++index] = color[2];
 }
 
 void initSubway()
@@ -127,8 +127,8 @@ void runSubway(uint8_t i, __bit forward)
         if (i == 0)
         {
             uint8_t at = l->at;
-            setColor(gates[at++ & 0x01], RED);
             setColor(gates[at & 0x01], GREEN);
+            setColor(gates[++at & 0x01], RED);
         }
     }
 
@@ -141,7 +141,7 @@ void blinkLights()
 {
     static uint8_t blinkTimer;
 
-    for (uint8_t i = 0; i < 2; i++)
+    for (uint8_t i = 0; i < 2; ++i)
     {
         __data Subway *l = &line[i];  // `__data` -> 8-bit pointer
         if (l->running)               // Blinks
@@ -221,7 +221,7 @@ void main()
     {
         // Each loop takes around 10 milliseconds.
         // 6,000 loops is around 60 seconds.
-        if (idleTimer++ >= 6000)
+        if (++idleTimer > 6000)
         {
             KILL = 1;  // Power off
         }
