@@ -106,7 +106,7 @@ void runSubway(uint8_t i, __bit forward)
         setColor(currentStop, l->color);
         if (forward)
         {
-            if (++l->at >= length)
+            if (++l->at == length)
             {
                 l->at = 0;
             }
@@ -219,9 +219,11 @@ void main()
 
     while (1)
     {
-        // Each loop takes around 10 milliseconds.
-        // 6,000 loops is around 60 seconds.
-        if (++idleTimer > 6000)
+        // Power off after 1 min idle time.
+        // Each loop takes around 10 milliseconds, 6,000 loops is around 60 seconds.
+        // Use 8-bit instructions to save a few bytes for the binary.
+        // 6,000 >> 8 = 23 and 23 << 8 = 5,888, close enough.
+        if ((uint8_t)((++idleTimer) >> 8) == 23)
         {
             KILL = 1;  // Power off
         }
