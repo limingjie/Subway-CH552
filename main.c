@@ -201,14 +201,14 @@ void init()
     CfgFsys();
     mDelaymS(5);
 
-    // Configure P3.0 and P3.4 as GPIO output
-    P3_MOD_OC &= ~((1 << KILL_PIN) & (1 << LED_PIN));
+    // Configure P3.0 and P3.3 in push-pull output mode.
+    P3_MOD_OC &= ~((1 << KILL_PIN) | (1 << LED_PIN));
     P3_DIR_PU |= (1 << KILL_PIN) | (1 << LED_PIN);
     KILL = 0;  // Power on
 
-    // Configure P1.1, P1.4, P1.5, P1.6, and P1.7 as input.
-    P1_MOD_OC &= ~((1 << KEY_A_PIN) & (1 << KEY_B_PIN) & (1 << KEY_C_PIN) & (1 << KEY_D_PIN) & (1 << KEY_E_PIN));
-    P1_DIR_PU &= ~((1 << KEY_A_PIN) & (1 << KEY_B_PIN) & (1 << KEY_C_PIN) & (1 << KEY_D_PIN) & (1 << KEY_E_PIN));
+    // Configure P1.1, P1.4, P1.5, P1.6, and P1.7 in Quasi-Bidirectional mode, support input with internal pull-up.
+    P1_MOD_OC &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
+    P1_DIR_PU &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
 }
 
 void main()
