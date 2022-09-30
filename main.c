@@ -21,11 +21,11 @@
 
 // Output Pins
 #define LED_PIN  0  // P3.0 - WS2812 LED Strip
-#define KILL_PIN 2  // P3.2 - Power control
+#define KILL_PIN 3  // P3.3 - Power control
 
 // Define bits
 SBIT(LED, 0xB0, LED_PIN);    // P3.0
-SBIT(KILL, 0xB0, KILL_PIN);  // P3.2
+SBIT(KILL, 0xB0, KILL_PIN);  // P3.3
 
 // WS2812
 #define LED_COUNT  27
