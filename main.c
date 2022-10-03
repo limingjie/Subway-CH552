@@ -1,16 +1,17 @@
 #include <stdint.h>
 
 #include <ch554.h>
+// #include <adc.h>
 #include <debug.h>
 
 #include "bitbang.h"
 
 // Input Pins
 #define KEY_A_PIN 1  // P1.1
-#define KEY_B_PIN 4  // P1.4
-#define KEY_C_PIN 5  // P1.5
-#define KEY_D_PIN 6  // P1.6
-#define KEY_E_PIN 7  // P1.7
+#define KEY_B_PIN 7  // P1.7
+#define KEY_C_PIN 6  // P1.6
+#define KEY_D_PIN 5  // P1.5
+#define KEY_E_PIN 4  // P1.4
 
 // All key pins are pulled up.
 // - A key pressed if input bit changes from 1 to 0.
@@ -209,6 +210,43 @@ void init()
     // Configure P1.1, P1.4, P1.5, P1.6, and P1.7 in Quasi-Bidirectional mode, support input with internal pull-up.
     P1_MOD_OC &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
     P1_DIR_PU &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
+
+    // Simplified code from CH554 ADC example.
+    // - Enable ADC
+    ADC_CFG &= ~bADC_CLK | 0;  // Fast mode, 96 clock cycles.
+    ADC_CFG |= bADC_EN;        // ADC power enable
+    // - Enable ADC channel 3, P3.2
+    ADC_CHAN1 = 1;
+    ADC_CHAN0 = 1;
+    P3_DIR_PU &= ~bAIN3;
+}
+
+void batteryCheck()
+{
+    static uint16_t batteryMonitorTimer = 0;
+
+    // Check battery voltage on the first second of every checking cycle.
+    if (batteryMonitorTimer == 100)
+    {
+        ADC_START = 1;     // Start ADC sampling.
+        while (ADC_START)  // Sampling completes when ADC_START becomes 0.
+        {
+        }
+
+        // Stop if the battery voltage drops under 3.0V.
+        // The ADC pin is connect using a 2x100k voltage divider, thus monitoring 1.5V.
+        // Assume the voltage supply is 3.3V: 3.3V * 116 / 255 = 1.50V
+        if (ADC_DATA < 116)  // Low voltage detected
+        {
+            KILL = 1;
+        }
+    }
+
+    // Set checking cycle, reset timer every around 10 seconds
+    if (++batteryMonitorTimer == 1000)
+    {
+        batteryMonitorTimer = 0;
+    }
 }
 
 void main()
@@ -227,6 +265,8 @@ void main()
         {
             KILL = 1;  // Power off
         }
+
+        batteryCheck();
 
         processEvents();
 
