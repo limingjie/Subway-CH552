@@ -1,6 +1,6 @@
 TARGET = subway
 
-FREQ_SYS = 16000000
+FREQ_SYS = 12000000
 
 C_FILES = \
 	main.c \
