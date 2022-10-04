@@ -211,6 +211,9 @@ void init()
     P1_MOD_OC &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
     P1_DIR_PU &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
 
+    // Turn off LDO
+    GLOBAL_CFG |= bLDO3V3_OFF;
+
     // Simplified code from CH554 ADC example.
     // - Enable ADC
     ADC_CFG &= ~bADC_CLK | 0;  // Fast mode, 96 clock cycles.
