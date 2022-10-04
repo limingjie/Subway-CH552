@@ -21,12 +21,14 @@
 #define DEBOUNCE_INTERVAL 8  // 8 ms
 
 // Output Pins
-#define LED_PIN  0  // P3.0 - WS2812 LED Strip
-#define KILL_PIN 3  // P3.3 - Power control
+#define LED_PIN    0  // P3.0 - WS2812 LED Strip
+#define KILL_PIN   3  // P3.3 - Power control
+#define BUZZER_PIN 4  // P3.4 - Buzzer
 
 // Define bits
-SBIT(LED, 0xB0, LED_PIN);    // P3.0
-SBIT(KILL, 0xB0, KILL_PIN);  // P3.3
+SBIT(LED, 0xB0, LED_PIN);        // P3.0
+SBIT(KILL, 0xB0, KILL_PIN);      // P3.3
+SBIT(BUZZER, 0xB0, BUZZER_PIN);  // P3.4
 
 // WS2812
 #define LED_COUNT  27
@@ -39,9 +41,39 @@ __data const uint8_t BLUE[3]    = {0, 0, BRIGHTNESS};
 __data const uint8_t PURPLE[3]  = {BRIGHTNESS, 0, BRIGHTNESS};
 __data const uint8_t BLACK[3]   = {0, 0, 0};
 
+// Music Notes
+#define C4 0   // Frequency = 261.6256 Hz, Period = 3822.2559 µs
+#define D4 1   // Frequency = 293.6648 Hz, Period = 3405.2430 µs
+#define E4 2   // Frequency = 329.6276 Hz, Period = 3033.7265 µs
+#define F4 3   // Frequency = 349.2282 Hz, Period = 2863.4572 µs
+#define G4 4   // Frequency = 391.9954 Hz, Period = 2551.0503 µs
+#define A4 5   // Frequency = 440.0000 Hz, Period = 2272.7273 µs
+#define B4 6   // Frequency = 493.8833 Hz, Period = 2024.7698 µs
+#define C5 7   // Frequency = 523.2511 Hz, Period = 1911.1283 µs
+#define D5 8   // Frequency = 587.3295 Hz, Period = 1702.6218 µs
+#define E5 9   // Frequency = 659.2551 Hz, Period = 1516.8635 µs
+#define F5 10  // Frequency = 698.4565 Hz, Period = 1431.7284 µs
+#define G5 11  // Frequency = 783.9909 Hz, Period = 1275.5250 µs
+#define A5 12  // Frequency = 880.0000 Hz, Period = 1136.3636 µs
+#define B5 13  // Frequency = 987.7666 Hz, Period = 1012.3849 µs
+
+// Half period of the notes
+// -> 1,000,000µs / Note_Frequency / 2
+__xdata const uint16_t HALF_NOTE_IN_uS[] = {
+    1911, 1703, 1517, 1432, 1276, 1136, 1012,  // C4 - B4
+    956,  851,  758,  716,  638,  568,  506    // C5 - B5
+};
+
+// Number of notes every 100 ms
+// -> Note_Frequency / 10
+__xdata const uint8_t NUM_NOTES_100mS[] = {
+    26, 29, 33, 35, 39, 44, 49,  // C4 - B4
+    52, 59, 66, 70, 78, 88, 99   // C5 - B5
+};
+
 typedef struct
 {
-    const uint8_t               stops[25];
+    const uint8_t               stops[20];
     const uint8_t               length;
     uint8_t                     at;
     uint8_t                     running;       // __bit will be promoted to int here
@@ -197,15 +229,32 @@ void processEvents()
     mDelaymS(DEBOUNCE_INTERVAL);
 }
 
+void buzzer()
+{
+    for (uint8_t i = 0; i < 14; i++)
+    {
+        uint8_t  times = NUM_NOTES_100mS[i];
+        uint16_t delay = HALF_NOTE_IN_uS[i];
+        while (--times)
+        {
+            BUZZER = 1;
+            mDelayuS(delay);
+            BUZZER = 0;
+            mDelayuS(delay);
+        }
+    }
+}
+
 void init()
 {
     CfgFsys();
     mDelaymS(5);
 
     // Configure P3.0 and P3.3 in push-pull output mode.
-    P3_MOD_OC &= ~((1 << KILL_PIN) | (1 << LED_PIN));
-    P3_DIR_PU |= (1 << KILL_PIN) | (1 << LED_PIN);
-    KILL = 0;  // Power on
+    P3_MOD_OC &= ~((1 << KILL_PIN) | (1 << LED_PIN) | (1 << BUZZER_PIN));
+    P3_DIR_PU |= (1 << KILL_PIN) | (1 << LED_PIN) | (1 << BUZZER_PIN);
+    KILL   = 0;  // Power on
+    BUZZER = 0;
 
     // Configure P1.1, P1.4, P1.5, P1.6, and P1.7 in Quasi-Bidirectional mode, support input with internal pull-up.
     P1_MOD_OC &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
@@ -255,6 +304,8 @@ void batteryCheck()
 void main()
 {
     init();
+
+    buzzer();
 
     initSubway();
 
