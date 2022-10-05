@@ -26,18 +26,29 @@ void initBuzzer()
     BUZZER = 0;
 }
 
-void buzzer()
+void playBuzzer(__xdata const uint8_t *melody, const uint8_t melody_length)
 {
-    for (uint8_t i = 0; i < 14; i++)
+    for (uint8_t note = 0; note < melody_length; note++)
     {
-        uint8_t  times = NUM_NOTES_100mS[i];
-        uint16_t delay = HALF_NOTE_IN_uS[i];
-        while (--times)
+        // Get a note
+        uint8_t  loop  = NUM_NOTES_100mS[*melody];
+        uint16_t delay = HALF_NOTE_IN_uS[*melody++];
+        // Play the note for length x 100ms.
+        while (loop--)
         {
-            BUZZER = 1;
-            mDelayuS(delay);
-            BUZZER = 0;
-            mDelayuS(delay);
+            uint8_t length = *melody;
+            while (length--)
+            {
+                BUZZER = 1;
+                mDelayuS(delay);
+                BUZZER = 0;
+                mDelayuS(delay);
+            }
         }
+
+        melody++;
+
+        // Pause a bit
+        mDelaymS(50);
     }
 }

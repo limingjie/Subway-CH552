@@ -72,6 +72,14 @@ __data const uint8_t gates[2] = {10, 11};
 
 uint16_t idleTimer = 0;
 
+// __xdata const uint8_t THE_STAR[] = {
+//     C4, 2, C4, 2, G4, 2, G4, 2, A4, 2, A4, 2, G4, 4,  // 1 1 | 5 5 | 6 6 | 5 -
+//     F4, 2, F4, 2, E4, 2, E4, 2, D4, 2, D4, 2, C4, 4   // 4 4 | 3 3 | 2 2 | 1 -
+// };
+
+__xdata const uint8_t STARTUP[]  = {E5, 2, B4, 2, A4, 3, E5, 2, B4, 4};
+__xdata const uint8_t SHUTDOWN[] = {A5, 1, E5, 1, A4, 1, B4, 2};
+
 void setColor(uint8_t index, __data const uint8_t *color)  // `__data` -> 8-bit pointer
 {
     index *= 3;
@@ -166,6 +174,12 @@ void blinkLights()
     }
 }
 
+void shutdown()
+{
+    playBuzzer(SHUTDOWN, 4);
+    KILL = 1;
+}
+
 void processEvents()
 {
     // All key pins are pulled up.
@@ -173,7 +187,7 @@ void processEvents()
 
     if (KEY_RELEASED(KEY_A_PIN))
     {
-        KILL = 1;  // Power off
+        shutdown();
     }
     if (KEY_RELEASED(KEY_B_PIN))
     {
@@ -197,7 +211,7 @@ void processEvents()
     mDelaymS(DEBOUNCE_INTERVAL);
 }
 
-void init()
+void startup()
 {
     CfgFsys();
     mDelaymS(5);
@@ -222,6 +236,10 @@ void init()
     ADC_CHAN1 = 1;
     ADC_CHAN0 = 1;
     P3_DIR_PU &= ~bAIN3;
+
+    // Play startup sound
+    initBuzzer();
+    playBuzzer(STARTUP, 5);
 }
 
 void batteryCheck()
@@ -241,7 +259,7 @@ void batteryCheck()
         // Assume the voltage supply is 3.3V: 3.3V * 116 / 255 = 1.50V
         if (ADC_DATA < 116)  // Low voltage detected
         {
-            KILL = 1;
+            shutdown();
         }
     }
 
@@ -254,10 +272,7 @@ void batteryCheck()
 
 void main()
 {
-    init();
-
-    initBuzzer();
-    buzzer();
+    startup();
 
     initSubway();
 
@@ -269,7 +284,7 @@ void main()
         // 6,000 >> 8 = 23 and 23 << 8 = 5,888, close enough.
         if ((uint8_t)((++idleTimer) >> 8) == 23)
         {
-            KILL = 1;  // Power off
+            shutdown();
         }
 
         batteryCheck();

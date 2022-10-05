@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 // Music Notes
+// https://en.wikipedia.org/wiki/Piano_key_frequencies
 #define C4 0   // Frequency = 261.6256 Hz, Period = 3822.2559 µs
 #define D4 1   // Frequency = 293.6648 Hz, Period = 3405.2430 µs
 #define E4 2   // Frequency = 329.6276 Hz, Period = 3033.7265 µs
@@ -20,4 +21,4 @@
 #define B5 13  // Frequency = 987.7666 Hz, Period = 1012.3849 µs
 
 void initBuzzer();
-void buzzer();
+void playBuzzer(__xdata const uint8_t *melody, const uint8_t melody_length);
