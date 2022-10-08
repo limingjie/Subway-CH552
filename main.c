@@ -217,24 +217,29 @@ void startup()
     mDelaymS(5);
 
     // Configure P3.0 and P3.3 in push-pull output mode.
+    // - Pn_MOD_OC = 0 (Push-Pull)
+    // - Pn_DIR_PU = 1 (Output)
     P3_MOD_OC &= ~((1 << KILL_PIN) | (1 << LED_PIN));
     P3_DIR_PU |= (1 << KILL_PIN) | (1 << LED_PIN);
     KILL = 0;  // Power on
 
     // Configure P1.1, P1.4, P1.5, P1.6, and P1.7 in Quasi-Bidirectional mode, support input with internal pull-up.
-    P1_MOD_OC &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
-    P1_DIR_PU &= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
+    // - Pn_MOD_OC = 1 (Open-Drain)
+    // - Pn_DIR_PU = 1 (Pull-Up)
+    P1_MOD_OC |= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
+    P1_DIR_PU |= (1 << KEY_A_PIN) | (1 << KEY_B_PIN) | (1 << KEY_C_PIN) | (1 << KEY_D_PIN) | (1 << KEY_E_PIN);
 
     // Turn off LDO
     GLOBAL_CFG |= bLDO3V3_OFF;
 
     // Simplified code from CH554 ADC example.
     // - Enable ADC
-    ADC_CFG &= ~bADC_CLK | 0;  // Fast mode, 96 clock cycles.
-    ADC_CFG |= bADC_EN;        // ADC power enable
+    ADC_CFG |= bADC_CLK;  // ADC_CLK (bit 0): 0 -> slow mode, 384 Fosc cycles for each ADC
+                          //                  1 -> fast mode,  96 Fosc cycles for each ADC
+    ADC_CFG |= bADC_EN;   // ADC_EN  (bit 3): Power enable bit of ADC module
     // - Enable ADC channel 3, P3.2
-    ADC_CHAN1 = 1;
     ADC_CHAN0 = 1;
+    ADC_CHAN1 = 1;
     P3_DIR_PU &= ~bAIN3;
 
     // Play startup sound
