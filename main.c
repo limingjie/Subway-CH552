@@ -30,7 +30,7 @@ SBIT(KILL, 0xB0, KILL_PIN);  // P3.3
 
 // WS2812
 #define LED_COUNT  27
-#define BRIGHTNESS 15
+#define BRIGHTNESS 5
 __xdata uint8_t      ledData[LED_COUNT * 3];  // In external data memory
 __bit                ledChanged = 0;
 __data const uint8_t RED[3]     = {BRIGHTNESS, 0, 0};
@@ -51,24 +51,24 @@ typedef struct
 
 __data Subway line[2] = {
     {
-        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},  // .stops
-        10,                              // .length
-        0,                               // .at
-        1,                               // .running
-        GREEN,                           // .color
-        RED,                             // .arrivalColor
+        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19},  // .stops
+        20,                                                                      // .length
+        0,                                                                       // .at
+        1,                                                                       // .running
+        GREEN,                                                                   // .color
+        RED,                                                                     // .arrivalColor
     },
     {
-        {5, 6, 7, 8, 9},  // .stops
-        5,                // .length
-        0,                // .at
-        1,                // .running
-        BLUE,             // .color
-        PURPLE,           // .arrivalColor
+        {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24},  // .stops
+        14,                                                        // .length
+        0,                                                         // .at
+        1,                                                         // .running
+        BLUE,                                                      // .color
+        PURPLE,                                                    // .arrivalColor
     },
 };
 
-__data const uint8_t gates[2] = {10, 11};
+__data const uint8_t gates[2] = {25, 26};
 
 uint16_t idleTimer = 0;
 
@@ -189,23 +189,23 @@ void processEvents()
 
     if (KEY_RELEASED(KEY_A_PIN))
     {
-        shutdown();
+        runSubway(0, 0);
     }
     if (KEY_RELEASED(KEY_B_PIN))
     {
-        runSubway(0, 0);
+        runSubway(0, 1);
     }
     if (KEY_RELEASED(KEY_C_PIN))
     {
-        runSubway(0, 1);
+        runSubway(1, 0);
     }
     if (KEY_RELEASED(KEY_D_PIN))
     {
-        runSubway(1, 0);
+        runSubway(1, 1);
     }
     if (KEY_RELEASED(KEY_E_PIN))
     {
-        runSubway(1, 1);
+        shutdown();
     }
 
     // Debounce
