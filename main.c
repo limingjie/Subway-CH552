@@ -36,6 +36,7 @@ __bit                ledChanged = 0;
 __data const uint8_t RED[3]     = {BRIGHTNESS, 0, 0};
 __data const uint8_t GREEN[3]   = {0, BRIGHTNESS, 0};
 __data const uint8_t BLUE[3]    = {0, 0, BRIGHTNESS};
+__data const uint8_t YELLOW[3]  = {BRIGHTNESS, BRIGHTNESS, 0};
 __data const uint8_t PURPLE[3]  = {BRIGHTNESS, 0, BRIGHTNESS};
 __data const uint8_t BLACK[3]   = {0, 0, 0};
 
@@ -51,20 +52,29 @@ typedef struct
 
 __data Subway line[2] = {
     {
-        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19},  // .stops
-        20,                                                                      // .length
-        0,                                                                       // .at
-        1,                                                                       // .running
-        GREEN,                                                                   // .color
-        RED,                                                                     // .arrivalColor
+        {
+            19, 0,  1,  2,  3,   // .stops
+            4,  5,  6,  7,  8,   //
+            9,  10, 11, 12, 13,  //
+            14, 15, 16, 17, 18   //
+        },
+        20,     // .length
+        0,      // .at
+        1,      // .running
+        GREEN,  // .color
+        RED,    // .arrivalColor
     },
     {
-        {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24},  // .stops
-        14,                                                        // .length
-        0,                                                         // .at
-        1,                                                         // .running
-        BLUE,                                                      // .color
-        PURPLE,                                                    // .arrivalColor
+        {
+            11, 12, 13, 14, 15,  // .stops
+            16, 17, 18, 19, 20,  //
+            21, 22, 23, 24       //
+        },
+        14,      // .length
+        0,       // .at
+        1,       // .running
+        BLUE,    // .color
+        PURPLE,  // .arrivalColor
     },
 };
 
@@ -72,15 +82,15 @@ __data const uint8_t gates[2] = {25, 26};
 
 uint16_t idleTimer = 0;
 
-// __xdata const uint8_t THE_STAR[] = {
-//     14,                                               // length
-//     C4, 2, C4, 2, G4, 2, G4, 2, A4, 2, A4, 2, G4, 4,  // 1 1 | 5 5 | 6 6 | 5 -
-//     F4, 2, F4, 2, E4, 2, E4, 2, D4, 2, D4, 2, C4, 4   // 4 4 | 3 3 | 2 2 | 1 -
-// };
+__xdata const uint8_t THE_STAR[] = {
+    14,                                               // length
+    C4, 2, C4, 2, G4, 2, G4, 2, A4, 2, A4, 2, G4, 4,  // 1 1 | 5 5 | 6 6 | 5 -
+    F4, 2, F4, 2, E4, 2, E4, 2, D4, 2, D4, 2, C4, 4   // 4 4 | 3 3 | 2 2 | 1 -
+};
 
 __xdata const uint8_t STARTUP_SOUND[]  = {5, E5, 2, B4, 2, A4, 3, E5, 2, B4, 4};
 __xdata const uint8_t SHUTDOWN_SOUND[] = {4, A5, 1, E5, 1, A4, 1, B4, 2};
-__xdata const uint8_t ERROR_SOUND[]    = {3, C4, 2, C4, 2, C4, 2};
+__xdata const uint8_t WARNING_SOUND[]  = {3, C4, 2, C4, 2, C4, 2};
 
 void setColor(uint8_t index, __data const uint8_t *color)  // `__data` -> 8-bit pointer
 {
@@ -92,8 +102,10 @@ void setColor(uint8_t index, __data const uint8_t *color)  // `__data` -> 8-bit 
 
 void initSubway()
 {
-    setColor(gates[0], RED);
-    setColor(gates[1], GREEN);
+    for (uint8_t i = 0; i < LED_COUNT; i++)
+    {
+        setColor(i, YELLOW);
+    }
 
     ledChanged = 1;
 }
@@ -205,7 +217,7 @@ void processEvents()
     }
     if (KEY_RELEASED(KEY_E_PIN))
     {
-        shutdown();
+        playBuzzer(THE_STAR);
     }
 
     // Debounce
@@ -252,6 +264,7 @@ void startup()
 void batteryCheck()
 {
     static uint16_t batteryMonitorTimer = 0;
+    static uint8_t  batteryLowCount     = 0;
 
     // Check battery voltage on the first second of every checking cycle.
     if (batteryMonitorTimer == 100)
@@ -261,13 +274,20 @@ void batteryCheck()
         {
         }
 
-        // Stop if the battery voltage drops under 3.0V.
+        // Shutdown if the battery voltage detected under 3.0V for 3 times.
         // The ADC pin is connect using a 2x100k voltage divider, thus monitoring 1.5V.
-        // Assume the voltage supply is 3.3V: 3.3V * 116 / 255 = 1.50V
+        // Assume the voltage supply is 3.3V: 255 x 1.5V / 3.3V = 115.9
         if (ADC_DATA < 116)  // Low voltage detected
         {
-            playBuzzer(ERROR_SOUND);
-            shutdown();
+            playBuzzer(WARNING_SOUND);
+            if (++batteryLowCount >= 3)
+            {
+                shutdown();
+            }
+        }
+        else
+        {
+            batteryLowCount = 0;
         }
     }
 
@@ -286,11 +306,11 @@ void main()
 
     while (1)
     {
-        // Power off after 1 min idle time.
+        // Power off after idle for 5 minutes.
         // Each loop takes around 10 milliseconds, 6,000 loops is around 60 seconds.
         // Use 8-bit instructions to save a few bytes for the binary.
-        // 6,000 >> 8 = 23 and 23 << 8 = 5,888, close enough.
-        if ((uint8_t)((++idleTimer) >> 8) == 23)
+        // 6,000 x 5 >> 8 = 117 and 117 << 8 = 29,952, close enough.
+        if ((uint8_t)((++idleTimer) >> 8) >= 117)
         {
             shutdown();
         }
