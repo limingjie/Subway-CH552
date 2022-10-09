@@ -2,19 +2,34 @@
 
 #include <debug.h>
 
+// Schematic
+//                             VCC
+//                              |
+//                        ______|
+//           1n4001      _|_    |
+//       Flyback Diode   /_\  [Passive Buzzer]
+//                        |_____|
+//                              |
+//                180Ω       b  | c
+//  GPIO <-------[/\/\]-------|<     SS8050
+//                              | e   NPN
+//                              |
+//                              |
+//                             GND
+
 #define BUZZER_PIN 4             // P3.4 - Buzzer
 SBIT(BUZZER, 0xB0, BUZZER_PIN);  // P3.4
 
-// Half period of the notes
+// The length of half period of notes in µs.
 // -> 1,000,000µs / Note_Frequency / 2
-__xdata const uint16_t HALF_NOTE_IN_uS[] = {
+__xdata const uint16_t NOTES_HALF_PERIOD_us[] = {
     1911, 1703, 1517, 1432, 1276, 1136, 1012,  // C4 - B4
     956,  851,  758,  716,  638,  568,  506    // C5 - B5
 };
 
-// Number of notes every 100 ms
+// Number of waves every 100 ms.
 // -> Note_Frequency / 10
-__xdata const uint8_t NUM_NOTES_100mS[] = {
+__xdata const uint8_t NOTES_WAVES_IN_100ms[] = {
     26, 29, 33, 35, 39, 44, 49,  // C4 - B4
     52, 59, 66, 70, 78, 88, 99   // C5 - B5
 };
@@ -26,18 +41,22 @@ void initBuzzer()
     BUZZER = 0;
 }
 
-void playBuzzer(__xdata const uint8_t *melody, const uint8_t melody_length)
+// Play a melody
+// - melody = [melody length, note_0, note_0_beats, note_1, note_1_beats...]
+//   - a beat last 100ms.
+//   - a 50ms pause is placed between 2 notes.
+void playBuzzer(__xdata const uint8_t *melody)
 {
-    for (uint8_t note = 0; note < melody_length; note++)
+    const uint8_t length = *melody++;
+    for (uint8_t note = 0; note < length; note++)
     {
-        // Get a note
-        uint8_t  loop  = NUM_NOTES_100mS[*melody];
-        uint16_t delay = HALF_NOTE_IN_uS[*melody++];
-        // Play the note for length x 100ms.
-        while (loop--)
+        uint8_t  waves = NOTES_WAVES_IN_100ms[*melody];    // The number of waves in 100ms.
+        uint16_t delay = NOTES_HALF_PERIOD_us[*melody++];  // The half period of the wave.
+        // The 2 while loops play the note waves x beats times, which last 100ms x beats.
+        while (waves--)
         {
-            uint8_t length = *melody;
-            while (length--)
+            uint8_t beats = *melody;
+            while (beats--)
             {
                 BUZZER = 1;
                 mDelayuS(delay);
@@ -48,7 +67,7 @@ void playBuzzer(__xdata const uint8_t *melody, const uint8_t melody_length)
 
         melody++;
 
-        // Pause a bit
+        // Pause between 2 notes
         mDelaymS(50);
     }
 }

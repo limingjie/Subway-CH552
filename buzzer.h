@@ -21,4 +21,4 @@
 #define B5 13  // Frequency = 987.7666 Hz, Period = 1012.3849 µs
 
 void initBuzzer();
-void playBuzzer(__xdata const uint8_t *melody, const uint8_t melody_length);
+void playBuzzer(__xdata const uint8_t *melody);
