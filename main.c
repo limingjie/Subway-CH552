@@ -42,24 +42,29 @@ __data uint8_t menuIndex = 0;
 // WS2812
 #define LED_COUNT  27
 #define BRIGHTNESS 5
-__xdata uint8_t      ledData[LED_COUNT * 3];  // In external data memory
-__bit                ledDataChanged = 0;
-__data const uint8_t RED[3]         = {BRIGHTNESS, 0, 0};
-__data const uint8_t GREEN[3]       = {0, BRIGHTNESS, 0};
-__data const uint8_t BLUE[3]        = {0, 0, BRIGHTNESS};
-__data const uint8_t YELLOW[3]      = {BRIGHTNESS, BRIGHTNESS, 0};
-__data const uint8_t PURPLE[3]      = {BRIGHTNESS, 0, BRIGHTNESS};
-__data const uint8_t BLACK[3]       = {0, 0, 0};
-__data const uint8_t BRIGHT[3]      = {255, 255, 255};
+__xdata uint8_t        ledData[LED_COUNT * 3];  // In external data memory
+__bit                  ledDataChanged = 0;
+__data int8_t          lightMode      = 0;
+__xdata const uint8_t  RED[]          = {BRIGHTNESS, 0, 0};
+__xdata const uint8_t  ORANGE[]       = {BRIGHTNESS, BRIGHTNESS >> 1, 0};
+__xdata const uint8_t  YELLOW[]       = {BRIGHTNESS, BRIGHTNESS, 0};
+__xdata const uint8_t  GREEN[]        = {0, BRIGHTNESS, 0};
+__xdata const uint8_t  LIGHTBLUE[]    = {0, BRIGHTNESS >> 1, BRIGHTNESS};
+__xdata const uint8_t  BLUE[]         = {0, 0, BRIGHTNESS};
+__xdata const uint8_t  INDIGO[]       = {BRIGHTNESS >> 1, 0, BRIGHTNESS};
+__xdata const uint8_t  PURPLE[]       = {BRIGHTNESS, 0, BRIGHTNESS};
+__xdata const uint8_t  BLACK[]        = {0, 0, 0};
+__xdata const uint8_t  BRIGHT[]       = {255, 255, 255};
+__xdata const uint8_t *palette[]      = {RED, ORANGE, YELLOW, GREEN, LIGHTBLUE, BLUE, INDIGO, PURPLE};
 
 typedef struct
 {
-    const uint8_t               stops[20];
-    const uint8_t               length;
-    uint8_t                     at;
-    uint8_t                     running;       // __bit will be promoted to int here
-    __data const uint8_t *const color;         // `__data` -> 8-bit pointer
-    __data const uint8_t *const arrivalColor;  // `__data` -> 8-bit pointer
+    const uint8_t                stops[20];
+    const uint8_t                length;
+    uint8_t                      at;
+    uint8_t                      running;       // __bit will be promoted to int here
+    __xdata const uint8_t *const color;         // `__data` -> 8-bit pointer
+    __xdata const uint8_t *const arrivalColor;  // `__data` -> 8-bit pointer
 } Subway;
 
 __data Subway line[2] = {
@@ -82,11 +87,11 @@ __data Subway line[2] = {
             16, 17, 18, 19, 20,  //
             21, 22, 23, 24       //
         },
-        14,      // .length
-        0,       // .at
-        1,       // .running
-        BLUE,    // .color
-        PURPLE,  // .arrivalColor
+        14,         // .length
+        0,          // .at
+        1,          // .running
+        LIGHTBLUE,  // .color
+        INDIGO,     // .arrivalColor
     },
 };
 
@@ -101,7 +106,7 @@ __xdata const uint8_t startupSound[]  = {5, E5, 2, B4, 2, A4, 3, E5, 2, B4, 4};
 __xdata const uint8_t shutdownSound[] = {4, A5, 1, E5, 1, A4, 1, B4, 2};
 __xdata const uint8_t warningSound[]  = {3, C4, 2, C4, 2, C4, 2};
 
-void setColor(uint8_t index, __data const uint8_t *color)  // `__data` -> 8-bit pointer
+void setColor(uint8_t index, __xdata const uint8_t *color)  // `__data` -> 8-bit pointer
 {
     index *= 3;
     ledData[index]   = color[1];
@@ -220,21 +225,86 @@ void timer0_interrupt(void) __interrupt(INT_NO_TMR0)
     systemTime++;
 }
 
+void setLightMode(__bit inc)
+{
+    lightMode += inc ? 1 : -1;
+
+    if (lightMode == -1)
+    {
+        lightMode = 4;
+    }
+    else if (lightMode == 5)
+    {
+        lightMode = 0;
+    }
+}
+
 void blinkLights()
 {
     __xdata static uint32_t lastBlinkTime = 0;
     static uint8_t          blinkCounter  = 0;
 
     // Blink every 500ms
-    if (systemTime - lastBlinkTime >= 500)
+    if (systemTime - lastBlinkTime >= 300)
     {
-        __bit on = blinkCounter++ & 0x01;
-        for (uint8_t i = 0; i < LED_COUNT; i++)
+        switch (lightMode)
         {
-            setColor(i, on ? YELLOW : BLACK);
-            on = !on;
+            case 0:
+                for (uint8_t i = 0; i < LED_COUNT; i++)
+                {
+                    setColor(i, ((i + blinkCounter) & 0x01) ? YELLOW : LIGHTBLUE);
+                }
+                break;
+            case 1:
+                for (uint8_t i = 0; i < 20; i++)
+                {
+                    setColor(i, palette[(i + blinkCounter) & 0x07]);
+                }
+                for (uint8_t i = 20; i < LED_COUNT; i++)
+                {
+                    setColor(i, palette[(i + blinkCounter) & 0x07]);
+                }
+                break;
+            case 2:
+                for (uint8_t i = 0; i < LED_COUNT; i++)
+                {
+                    setColor(i, palette[blinkCounter & 0x07]);
+                }
+                break;
+            case 3:
+                for (uint8_t i = 0; i < 20; i++)
+                {
+                    if (((i + blinkCounter) & 0x07) < 2)
+                    {
+                        setColor(i, palette[blinkCounter & 0x07]);
+                    }
+                }
+                for (uint8_t i = 20; i < LED_COUNT; i++)
+                {
+                    if (((i + blinkCounter) & 0x07) < 2)
+                    {
+                        setColor(i, palette[blinkCounter & 0x07]);
+                    }
+                }
+                break;
+            case 4:
+            {
+                uint16_t        rand = (uint16_t)systemTime;
+                __xdata uint8_t numbers[9];
+                for (uint8_t i = 0; i < 9; i++)
+                {
+                    numbers[i] = (rand >> i) & 0x07;
+                }
+                uint8_t next = 0;
+                for (uint8_t i = blinkCounter & 0x03; i < LED_COUNT; i += 4)
+                {
+                    setColor(i, &numbers[next++]);
+                }
+                break;
+            }
         }
 
+        ++blinkCounter;
         ledDataChanged = 1;
         lastBlinkTime  = systemTime;
     }
@@ -249,23 +319,51 @@ void processEvents()
     {
         if (KEY_RELEASED(KEY_A_PIN))
         {
-            if (menuIndex == 0)
-                runSubway(0, 0);
+            switch (menuIndex)
+            {
+                case 0:
+                    runSubway(0, 0);
+                    break;
+                case 1:
+                    setLightMode(1);
+                    break;
+            }
         }
         if (KEY_RELEASED(KEY_B_PIN))
         {
-            if (menuIndex == 0)
-                runSubway(0, 1);
+            switch (menuIndex)
+            {
+                case 0:
+                    runSubway(0, 1);
+                    break;
+                case 1:
+                    setLightMode(0);
+                    break;
+            }
         }
         if (KEY_RELEASED(KEY_C_PIN))
         {
-            if (menuIndex == 0)
-                runSubway(1, 0);
+            switch (menuIndex)
+            {
+                case 0:
+                    runSubway(1, 0);
+                    break;
+                case 1:
+                    setLightMode(1);
+                    break;
+            }
         }
         if (KEY_RELEASED(KEY_D_PIN))
         {
-            if (menuIndex == 0)
-                runSubway(1, 1);
+            switch (menuIndex)
+            {
+                case 0:
+                    runSubway(1, 1);
+                    break;
+                case 1:
+                    setLightMode(0);
+                    break;
+            }
         }
         if (KEY_RELEASED(KEY_E_PIN))
         {
