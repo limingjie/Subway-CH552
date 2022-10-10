@@ -28,9 +28,10 @@
 SBIT(LED, 0xB0, LED_PIN);            // P3.0
 SBIT(SHUTDOWN, 0xB0, SHUTDOWN_PIN);  // P3.3
 
-// All the time variables are in milliseconds
-__data uint32_t systemTime     = 0;
-__data uint32_t lastActionTime = 0;
+// Time in milliseconds
+//   2^32 / 1000 / 3600 / 24 = 49.71 days
+__data uint32_t systemTime         = 0;
+__data uint32_t lastUserActionTime = 0;
 // __data uint32_t previousTime   = 0;
 
 // Menu
@@ -163,8 +164,8 @@ void runSubway(uint8_t i, __bit forward)
         }
     }
 
-    ledDataChanged = 1;
-    lastActionTime = systemTime;
+    ledDataChanged     = 1;
+    lastUserActionTime = systemTime;
 }
 
 void blinkSubwayLights()
@@ -197,7 +198,22 @@ void shutdown()
 
 void timer0_interrupt(void) __interrupt(INT_NO_TMR0)
 {
-    // (0x10000 - 0xFC18) x (1 / (12000000 / 12))) = 0.001s
+    // In Mode 1, timer0/1 interrupt is triggered when TH0/1 & TL0/1 changes from 0xFFFF to 0x0000.
+    // After reset (bT0_CLK = 0), the timer0's internal clock frequency is MCU_Frequency/12.
+    // Calculate TH & TL,
+    //   (0xFFFF + 1 - 0xTHTL) x (1 / (MCU_Frequency / 12))) = 0.001s
+    //   -> 0xTHTL = 65536 - 0.001 x (MCU_Frequency / 12)
+    // MCU Frequency    TH    TL     Decimal
+    //        32 MHz  0xF5  0x95  62,869.333
+    //        24 MHz  0xF8  0x30  63,536
+    //        16 MHz  0xFA  0xCB  64,202.667
+    //        12 MHz  0xFC  0x18  64,536
+    //         6 MHz  0xFE  0x0C  65,036
+    //         3 MHz  0xFF  0x06  65,286
+    //       750 KHz  0xFF  0xC2  65,473.5
+    //      187.5KHz  0xFF  0xF0  65,520.375
+
+    // Reset TH0 & TL0 for the next interrupt
     TH0 = 0xFC;
     TL0 = 0x18;
 
@@ -253,17 +269,19 @@ void processEvents()
         }
         if (KEY_RELEASED(KEY_E_PIN))
         {
-            if (++menuIndex == 2)
-            {
-                menuIndex = 0;
-            }
-
             // Reset subway lights
-            if (menuIndex == 0)
+            switch (++menuIndex)
             {
-                initSubway();
+                case 3:  // Go back to 0;
+                    menuIndex = 0;
+                case 0:  // Subway
+                    initSubway();
+                    break;
+                // case 1: // Lights
+                case 2:  // Play songs
+                    playBuzzer(theStarSong);
+                    break;
             }
-            // playBuzzer(theStarSong);
         }
 
         lastKeyState     = P1;
@@ -273,6 +291,7 @@ void processEvents()
 
 void startup()
 {
+    // Set MCU Frequency
     CfgFsys();
     mDelaymS(5);
 
@@ -281,7 +300,8 @@ void startup()
     // - Pn_DIR_PU = 1 (Output)
     P3_MOD_OC &= ~((1 << SHUTDOWN_PIN) | (1 << LED_PIN));
     P3_DIR_PU |= (1 << SHUTDOWN_PIN) | (1 << LED_PIN);
-    SHUTDOWN = 0;  // Power on
+    // Power on latch, P3.3 connected to power button circuit.
+    SHUTDOWN = 0;
 
     // Configure P1.1, P1.4, P1.5, P1.6, and P1.7 in Quasi-Bidirectional mode, support input with internal pull-up.
     // - Pn_MOD_OC = 1 (Open-Drain)
@@ -292,25 +312,27 @@ void startup()
     // Turn off LDO
     GLOBAL_CFG |= bLDO3V3_OFF;
 
+    // Enable ADC for battery monitor
     // Simplified code from CH554 ADC example.
-    // - Enable ADC
+    // 1. Enable ADC
     ADC_CFG |= bADC_CLK;  // ADC_CLK (bit 0): 0 -> slow mode, 384 Fosc cycles for each ADC
                           //                  1 -> fast mode,  96 Fosc cycles for each ADC
     ADC_CFG |= bADC_EN;   // ADC_EN  (bit 3): Power enable bit of ADC module
-    // - Enable ADC channel 3, P3.2
+    // 2. Enable ADC channel 3, P3.2
     ADC_CHAN0 = 1;
     ADC_CHAN1 = 1;
     P3_DIR_PU &= ~bAIN3;
 
-    // Enable interrupt globally
+    // Use timer0 to record system time in milliseconds
+    // 1. Enable interrupt globally
     EA = 1;
-    // Enable timer0 interrupt
+    // 2. Enable timer0 interrupt
     ET0 = 1;
-    // Set timer0 to Mode 1 - 16-bit counter
-    // - The reset value of TMOD = 0x00
-    // - Set bT0_M1 = 0 and bT0_M0 = 1
+    // 3. Set timer0 to Mode 1 - 16-bit counter
+    //   - The reset value of TMOD = 0x00
+    //   - Set bT0_M1 = 0 and bT0_M0 = 1
     TMOD |= bT0_M0;
-    // Start timer 0
+    // 4. Start timer0
     TR0 = 1;
 
     // Play startup sound
@@ -320,7 +342,7 @@ void startup()
 
 void batteryCheck()
 {
-    static uint16_t lastCheckTime   = 0;
+    static uint32_t lastCheckTime   = 0;
     static uint8_t  batteryLowCount = 0;
 
     // Check battery voltage every 10 seconds
@@ -336,9 +358,9 @@ void batteryCheck()
         // Assume the voltage supply is 3.3V: 255 x 1.5V / 3.3V = 115.9
         if (ADC_DATA < 116)  // Low voltage detected
         {
-            playBuzzer(warningSound);
             if (++batteryLowCount >= 3)
             {
+                playBuzzer(warningSound);
                 shutdown();
             }
         }
@@ -359,7 +381,7 @@ void main()
     while (1)
     {
         // Power off after idle for 5 minutes.
-        if (systemTime - lastActionTime >= 300000)
+        if (systemTime - lastUserActionTime >= 300000)
         {
             shutdown();
         }
