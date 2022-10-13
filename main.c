@@ -30,8 +30,8 @@ SBIT(SHUTDOWN, 0xB0, SHUTDOWN_PIN);  // P3.3
 
 // Time in milliseconds
 //   2^32 / 1000 / 3600 / 24 = 49.71 days
-__data uint32_t systemTime         = 0;
-__data uint32_t lastUserActionTime = 0;
+__data volatile uint32_t systemTime         = 0;
+__data uint32_t          lastUserActionTime = 0;
 // __data uint32_t previousTime   = 0;
 
 // Menu
@@ -169,8 +169,7 @@ void runSubway(uint8_t i, __bit forward)
         }
     }
 
-    ledDataChanged     = 1;
-    lastUserActionTime = systemTime;
+    ledDataChanged = 1;
 }
 
 void blinkSubwayLights()
@@ -382,7 +381,12 @@ void processEvents()
             }
         }
 
-        lastKeyState     = P1;
+        if (lastKeyState != P1)
+        {
+            lastKeyState       = P1;
+            lastUserActionTime = systemTime;
+        }
+
         lastDebounceTime = systemTime;
     }
 }
